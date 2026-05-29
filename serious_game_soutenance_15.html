@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhysioHand Game</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+  :root {
+    --bg: #0a0f1e; --accent: #4f9cf9; --accent2: #a78bfa; --accent3: #34d399;
+    --text: #f0f4ff; --muted: #8892a4;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text);
+    height:100vh; overflow:hidden; display:flex; align-items:center; justify-content:center;
+  }
+  .page {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity 0.5s;
+  }
+  .page.active { opacity:1; pointer-events:all; }
+
+  /* PAGE 1 */
+  #page-disclaimer { background:radial-gradient(ellipse at 60% 40%,#1a2040,#0a0f1e 70%); }
+  .card {
+    max-width:620px; width:90%; padding:52px 48px;
+    background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+    border-radius:24px; text-align:center; box-shadow:0 40px 80px rgba(0,0,0,0.5);
+    animation:fadeUp 0.8s ease both;
+  }
+  .badge {
+    display:inline-block; font-size:11px; font-weight:600; letter-spacing:.15em;
+    text-transform:uppercase; color:var(--accent); background:rgba(79,156,249,.12);
+    border:1px solid rgba(79,156,249,.25); border-radius:100px; padding:6px 16px; margin-bottom:28px;
+  }
+  .card h1 {
+    font-family:'DM Serif Display',serif; font-size:2rem; line-height:1.2; margin-bottom:24px;
+    background:linear-gradient(135deg,#f0f4ff,#a78bfa); -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .card h2 { font-family:'DM Serif Display',serif; font-size:1.3rem; margin-bottom:10px; }
+  .card p { font-size:.93rem; line-height:1.8; color:#b0bcd4; margin-bottom:32px; }
+  .btn {
+    display:inline-flex; align-items:center; gap:10px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#fff; font-family:'DM Sans',sans-serif; font-size:.95rem; font-weight:600;
+    padding:14px 36px; border-radius:100px; border:none; cursor:pointer;
+    transition:transform .2s,box-shadow .2s; box-shadow:0 8px 32px rgba(79,156,249,.3);
+  }
+  .btn:hover { transform:translateY(-2px); box-shadow:0 12px 40px rgba(79,156,249,.45); }
+  .btn.full { width:100%; justify-content:center; }
+
+  /* PAGE 2 */
+  #page-name { background:radial-gradient(ellipse at 40% 60%,#1a1230,#0a0f1e 70%); }
+  .name-input {
+    width:100%; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12);
+    border-radius:12px; padding:16px 20px; font-family:'DM Sans',sans-serif; font-size:1.1rem;
+    color:var(--text); outline:none; margin-bottom:20px; transition:border-color .2s; text-align:center;
+  }
+  .name-input:focus { border-color:var(--accent); }
+  .name-input::placeholder { color:var(--muted); }
+  .sub-label { font-size:.85rem; color:var(--muted); margin-bottom:12px; }
+  .hand-choice { display:flex; gap:12px; margin-bottom:24px; }
+  .hand-btn {
+    flex:1; padding:14px; background:rgba(255,255,255,.05); border:2px solid rgba(255,255,255,.1);
+    border-radius:12px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:1rem;
+    font-weight:500; cursor:pointer; transition:all .2s; text-align:center;
+  }
+  .hand-btn:hover { border-color:var(--accent); background:rgba(79,156,249,.1); }
+  .hand-btn.selected { border-color:var(--accent); background:rgba(79,156,249,.18); color:var(--accent); }
+
+  /* PAGE 3 */
+  #page-game { flex-direction:column; background:#060b18; }
+  #game-canvas { display:block; border-radius:16px; border:1px solid rgba(255,255,255,.06); }
+
+  #hud {
+    position:absolute; top:14px; left:0; right:0;
+    display:flex; justify-content:center; gap:20px; z-index:10;
+  }
+  .hud-box {
+    background:rgba(10,15,30,.85); border:1px solid rgba(255,255,255,.1);
+    border-radius:12px; padding:9px 20px; text-align:center; backdrop-filter:blur(10px);
+  }
+  .hud-label { font-size:9px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
+  .hud-value { font-family:'DM Serif Display',serif; font-size:1.35rem; color:var(--text); }
+  #level-badge .hud-value { color:var(--accent); }
+  #timer-box .hud-value { color:var(--accent3); }
+  #timer-box.urgent .hud-value { color:#f87171; animation:pulse .5s infinite alternate; }
+
+  /* Encourage — centré dans le canvas */
+  #encourage-msg {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    font-family:'DM Serif Display',serif; font-size:2.2rem; font-weight:700;
+    opacity:0; transition:opacity .25s; pointer-events:none; white-space:nowrap;
+    z-index:30; text-align:center; text-shadow:0 2px 24px rgba(0,0,0,.8);
+  }
+  #encourage-msg.visible { opacity:1; }
+
+  /* Caméra */
+  #cam-feed-container {
+    position:absolute; bottom:14px; left:14px; width:170px; height:128px;
+    border-radius:12px; overflow:hidden; border:1px solid rgba(255,255,255,.12);
+    background:#000; z-index:20;
+  }
+  #cam-video { position:absolute; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); opacity:.55; }
+  #cam-overlay { position:absolute; inset:0; }
+  #cam-label {
+    position:absolute; bottom:5px; left:0; right:0; text-align:center;
+    font-size:9px; font-weight:600; letter-spacing:.1em; text-transform:uppercase;
+    color:rgba(255,255,255,.45);
+  }
+  #cam-status {
+    position:absolute; bottom:18px; left:198px;
+    font-size:.76rem; color:var(--muted); background:rgba(10,15,30,.8);
+    padding:7px 14px; border-radius:100px; border:1px solid rgba(255,255,255,.06); z-index:10;
+  }
+
+  /* Flex bar */
+  #flex-bar-container {
+    position:absolute; right:18px; top:50%; transform:translateY(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:8px; z-index:10;
+  }
+  #flex-label { font-size:9px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); writing-mode:vertical-rl; transform:rotate(180deg); }
+  #flex-bar-bg { width:10px; height:140px; background:rgba(255,255,255,.06); border-radius:100px; overflow:hidden; display:flex; align-items:flex-end; }
+  #flex-bar-fill { width:100%; height:0%; background:linear-gradient(to top,var(--accent3),var(--accent)); border-radius:100px; transition:height .1s; }
+
+  /* End overlay */
+  #end-overlay {
+    position:absolute; inset:0; background:rgba(6,11,24,.93);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:50; border-radius:16px; opacity:0; pointer-events:none; transition:opacity .5s;
+  }
+  #end-overlay.visible { opacity:1; pointer-events:all; }
+  #end-overlay h2 {
+    font-family:'DM Serif Display',serif; font-size:2rem; margin-bottom:10px;
+    background:linear-gradient(135deg,#f0f4ff,#34d399); -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  #end-overlay p { color:var(--muted); margin-bottom:28px; font-size:.93rem; }
+  #end-score { font-family:'DM Serif Display',serif; font-size:4rem; color:var(--accent3); margin-bottom:6px; }
+
+  @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes pulse { from{opacity:1} to{opacity:.4} }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 : DISCLAIMER -->
+<div class="page active" id="page-disclaimer">
+  <div class="card">
+    <div class="badge">Soutenance · 1er juin 2026</div>
+    <h1>PhysioHand Game</h1>
+    <p>
+      Ce prototype a été conçu exclusivement pour la soutenance du 1<sup>er</sup> juin 2026.
+      Il ne constitue en aucun cas un dispositif médical et n'a pas vocation à être utilisé en contexte clinique.
+      Il a pour unique objectif d'illustrer, de manière concrète et prospective, une perspective de recherche issue de ce travail :
+      la conception de <em>PhysioHand Game</em>, un <em>serious game</em> centré sur les déterminants de l'adhésion en rééducation de la main.
+    </p>
+    <button class="btn" onclick="showPage('page-name')">Commencer →</button>
+  </div>
+</div>
+
+<!-- PAGE 2 : PRÉNOM + MAIN -->
+<div class="page" id="page-name">
+  <div class="card" style="max-width:480px">
+    <h2>Bienvenue dans PhysioHand Game<br>un jeu rééducatif conçu pour toi !</h2>
+    <p>Entre ton prénom pour personnaliser ta séance</p>
+    <input class="name-input" id="patient-name" type="text" placeholder="Ton prénom..."
+      maxlength="30" onkeydown="if(event.key==='Enter')checkAndStart()" autofocus/>
+    <div class="sub-label">Quelle est ta main blessée ?</div>
+    <div class="hand-choice">
+      <div class="hand-btn" id="btn-left" onclick="selectHand('Left')">👈 Main gauche</div>
+      <div class="hand-btn" id="btn-right" onclick="selectHand('Right')">👉 Main droite</div>
+    </div>
+    <button class="btn full" onclick="checkAndStart()">Démarrer la rééducation →</button>
+  </div>
+</div>
+
+<!-- PAGE 3 : CALIBRATION -->
+<div class="page" id="page-calib">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:20px;max-width:700px;width:90%;text-align:center;">
+    <div class="badge">Calibration de la caméra</div>
+    <h2 style="font-family:'DM Serif Display',serif;font-size:1.8rem;">Positionne ta main devant la caméra</h2>
+    <p style="color:#b0bcd4;font-size:.9rem;line-height:1.7;max-width:520px;">
+      La caméra est utilisée <strong style="color:var(--accent)">uniquement pour le feedback visuel</strong> de ta main blessée en temps réel.
+      Aucune donnée n'est enregistrée ni transmise. Assure-toi que ta main est bien visible dans le cadre ci-dessous.
+    </p>
+    <div style="position:relative;width:420px;height:315px;border-radius:16px;overflow:hidden;border:2px solid rgba(79,156,249,0.35);background:#000;flex-shrink:0;">
+      <video id="calib-video" autoplay muted playsinline style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:0.8;"></video>
+      <canvas id="calib-overlay" width="420" height="315" style="position:absolute;inset:0;"></canvas>
+      <div id="calib-status" style="position:absolute;bottom:10px;left:0;right:0;text-align:center;font-size:.78rem;color:rgba(255,255,255,.55);background:rgba(0,0,0,.55);padding:6px;">📷 Initialisation de la caméra...</div>
+    </div>
+    <button class="btn" id="calib-btn" onclick="startCountdown()">C'est bon, je commence →</button>
+  </div>
+  <!-- Countdown overlay -->
+  <div id="countdown-overlay" style="display:none;position:fixed;inset:0;background:rgba(6,11,24,0.92);z-index:100;align-items:center;justify-content:center;flex-direction:column;">
+    <div id="countdown-num" style="font-family:'DM Serif Display',serif;font-size:8rem;color:var(--accent3);text-shadow:0 0 60px rgba(52,211,153,0.6);transition:transform .2s;"></div>
+    <div style="color:var(--muted);font-size:1rem;margin-top:16px;">Prépare ta main...</div>
+  </div>
+</div>
+
+<!-- PAGE 4 : JEU -->
+<div class="page" id="page-game">
+  <div id="hud">
+    <div class="hud-box" id="level-badge"><div class="hud-label">Niveau</div><div class="hud-value" id="hud-level">1</div></div>
+    <div class="hud-box"><div class="hud-label">Score</div><div class="hud-value" id="hud-score">0</div></div>
+    <div class="hud-box"><div class="hud-label">Anneaux</div><div class="hud-value" id="hud-rings">0/10</div></div>
+    <div class="hud-box" id="timer-box"><div class="hud-label">Temps</div><div class="hud-value" id="hud-timer">2:00</div></div>
+  </div>
+
+  <div id="encourage-msg"></div>
+  <!-- Instructions overlay -->
+  <div id="instructions-overlay" style="position:absolute;inset:0;background:rgba(6,11,24,0.93);z-index:40;display:flex;align-items:center;justify-content:center;border-radius:16px;">
+    <div style="text-align:center;max-width:500px;padding:36px;">
+      <div style="font-family:'DM Serif Display',serif;font-size:1.8rem;margin-bottom:8px;color:var(--text);">Comment jouer ?</div>
+      <div style="font-size:.85rem;color:var(--muted);margin-bottom:32px;">Contrôle la balle avec la flexion de ta main blessée</div>
+
+      <div style="display:flex;gap:20px;justify-content:center;margin-bottom:32px;">
+
+        <!-- Fléchir -->
+        <div style="flex:1;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.25);border-radius:16px;padding:20px 16px;text-align:center;">
+          <div style="font-size:2rem;margin-bottom:12px;">✊</div>
+          <div style="font-weight:600;color:var(--accent3);font-size:.95rem;margin-bottom:6px;">Fléchis les doigts</div>
+          <div style="font-size:.8rem;color:var(--muted);margin-bottom:12px;">Ferme la main vers la paume</div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;">
+            <div style="width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);"></div>
+            <div style="font-size:.8rem;color:var(--accent);">↓ La balle descend</div>
+          </div>
+        </div>
+
+        <!-- Tendre -->
+        <div style="flex:1;background:rgba(79,156,249,0.08);border:1px solid rgba(79,156,249,0.25);border-radius:16px;padding:20px 16px;text-align:center;">
+          <div style="font-size:2rem;margin-bottom:12px;">🖐</div>
+          <div style="font-weight:600;color:var(--accent);font-size:.95rem;margin-bottom:6px;">Tends les doigts</div>
+          <div style="font-size:.8rem;color:var(--muted);margin-bottom:12px;">Ouvre la main à plat</div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;">
+            <div style="width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);"></div>
+            <div style="font-size:.8rem;color:var(--accent);">↑ La balle monte</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;font-size:.82rem;color:var(--muted);margin-bottom:28px;line-height:1.6;">
+        Les anneaux colorés arrivent de la droite. Place la balle à la bonne hauteur pour les attraper !
+      </div>
+
+      <div style="font-family:'DM Serif Display',serif;font-size:3.5rem;color:var(--accent3);text-shadow:0 0 30px rgba(52,211,153,0.5);">
+        <span id="instructions-countdown"></span>
+      </div>
+    </div>
+  </div>
+  <canvas id="game-canvas"></canvas>
+
+  <div id="cam-feed-container">
+    <video id="cam-video" autoplay muted playsinline></video>
+    <canvas id="cam-overlay"></canvas>
+    <div id="cam-label">Feedback main</div>
+  </div>
+  <div id="cam-status">📷 Initialisation...</div>
+
+  <div id="flex-bar-container">
+    <div id="flex-label">Flexion</div>
+    <div id="flex-bar-bg"><div id="flex-bar-fill"></div></div>
+  </div>
+
+  <div id="end-overlay">
+    <div id="end-score">0</div>
+    <h2 id="end-title">Bravo !</h2>
+    <p id="end-msg"></p>
+    <div id="end-stats" style="display:flex;gap:24px;margin-bottom:24px;">
+      <div style="text-align:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 22px;">
+        <div style="font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Réussite</div>
+        <div id="end-pct" style="font-family:'DM Serif Display',serif;font-size:1.8rem;color:var(--accent3);">0%</div>
+      </div>
+      <div style="text-align:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 22px;">
+        <div style="font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Anneaux</div>
+        <div id="end-rings-recap" style="font-family:'DM Serif Display',serif;font-size:1.8rem;color:var(--accent);">0/10</div>
+      </div>
+      <div style="text-align:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 22px;">
+        <div style="font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Temps</div>
+        <div id="end-time-recap" style="font-family:'DM Serif Display',serif;font-size:1.8rem;color:var(--accent2);">0s</div>
+      </div>
+    </div>
+    <div id="end-next-ok" style="display:flex;gap:12px;">
+      <button class="btn" onclick="nextLevel()">Niveau suivant →</button>
+      <button class="btn" onclick="showMenu()" style="background:rgba(255,255,255,0.06);box-shadow:none;border:1px solid rgba(255,255,255,0.1);">Voir mes stats</button>
+    </div>
+    <div id="end-next-blocked" style="display:none;text-align:center;">
+      <div style="font-size:.85rem;color:#f87171;margin-bottom:16px;line-height:1.6;">
+        Il faut atteindre <strong>90% de réussite</strong> pour passer au niveau suivant.<br>
+        Tu peux y arriver <span id="end-name-blocked"></span> !  Réessaie ce niveau !
+      </div>
+      <button class="btn" onclick="retryLevel()">Réessayer ce niveau →</button>
+      <button class="btn" onclick="showMenu()" style="margin-top:10px;background:rgba(255,255,255,0.06);box-shadow:none;border:1px solid rgba(255,255,255,0.1);">Voir mes stats quand même</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+// ── NAV ──
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+let patientName = '';
+let injuredHand = null; // 'Left' or 'Right'
+
+function selectHand(h) {
+  injuredHand = h;
+  document.getElementById('btn-left').classList.toggle('selected', h==='Left');
+  document.getElementById('btn-right').classList.toggle('selected', h==='Right');
+}
+
+function checkAndStart() {
+  patientName = document.getElementById('patient-name').value.trim() || 'toi';
+  if (!injuredHand) { selectHand('Right'); }
+  showPage('page-calib');
+  initCalib();
+}
+
+function launchGame() {
+  stopCalib();
+  showPage('page-game');
+  initGame();
+}
+
+
+
+// ── SOUNDS ──
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+function getAudio() { if (!audioCtx) audioCtx = new AudioCtx(); return audioCtx; }
+
+function playDing() {
+  try {
+    const ac = getAudio();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.frequency.setValueAtTime(880, ac.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, ac.currentTime+0.1);
+    gain.gain.setValueAtTime(0.3, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+0.3);
+    osc.start(); osc.stop(ac.currentTime+0.3);
+  } catch(e){}
+}
+
+function playWhoosh() {
+  try {
+    const ac = getAudio();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = 'sawtooth';
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.frequency.setValueAtTime(300, ac.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(80, ac.currentTime+0.2);
+    gain.gain.setValueAtTime(0.15, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+0.2);
+    osc.start(); osc.stop(ac.currentTime+0.2);
+  } catch(e){}
+}
+
+// ── COUNTDOWN (page calib → game) ──
+function startCountdown() {
+  const overlay = document.getElementById('countdown-overlay');
+  const num = document.getElementById('countdown-num');
+  overlay.style.display = 'flex';
+  let count = 3;
+  num.textContent = count;
+  const interval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      num.textContent = count;
+      num.style.transform = 'scale(1.3)';
+      setTimeout(() => num.style.transform = 'scale(1)', 200);
+    } else {
+      clearInterval(interval);
+      overlay.style.display = 'none';
+      launchGame();
+    }
+  }, 1000);
+}
+
+// ── INSTRUCTIONS (in-game) ──
+function showInstructions(onDone, seconds) {
+  const overlay = document.getElementById('instructions-overlay');
+  const countEl = document.getElementById('instructions-countdown');
+  overlay.style.display = 'flex';
+  let c = seconds || 10;
+  countEl.textContent = c;
+  const iv = setInterval(() => {
+    c--;
+    if (c > 0) { countEl.textContent = c; }
+    else {
+      clearInterval(iv);
+      overlay.style.display = 'none';
+      onDone();
+    }
+  }, 1000);
+}
+
+
+// ── SESSION STATS ──
+let sessionStats = { levels: 0, score: 0, totalRings: 0, totalSpawned: 0 };
+
+function resetSession() {
+  sessionStats = { levels: 0, score: 0, totalRings: 0, totalSpawned: 0 };
+}
+
+function showMenu() {
+  sessionStats.levels++;
+  sessionStats.score = gs.score;
+  sessionStats.totalRings += gs.ringsCollected;
+  sessionStats.totalSpawned += gs.ringsCollected + gs.ringsMissed;
+
+  const pct = sessionStats.totalSpawned > 0
+    ? Math.round((sessionStats.totalRings / sessionStats.totalSpawned) * 100) : 0;
+
+  document.getElementById('menu-name').textContent = patientName;
+  document.getElementById('menu-levels').textContent = sessionStats.levels;
+  document.getElementById('menu-score').textContent = sessionStats.score;
+  document.getElementById('menu-pct').textContent = pct + '%';
+  document.getElementById('menu-rings').textContent = sessionStats.totalRings;
+
+  let msg = '';
+  if (pct >= 80) msg = `Excellente séance ${patientName} ! Tu as montré une belle maîtrise de ta flexion sur ${sessionStats.levels} niveau${sessionStats.levels > 1 ? 'x' : ''}.`;
+  else if (pct >= 50) msg = `Bonne séance ${patientName} ! Tu progresses bien. Continue à travailler ta flexion régulièrement.`;
+  else msg = `Chaque séance compte ${patientName} ! La régularité est la clé de ta récupération.`;
+
+  document.getElementById('menu-msg').textContent = msg;
+  document.getElementById('end-overlay').classList.remove('visible');
+  showPage('page-menu');
+}
+
+function restartGame() {
+  resetSession();
+  gs = {score:0, level:1, ringsCollected:0, ringsMissed:0, ringsTarget:10, speed:2.2, rings:[],
+        ball:{x:canvas.width/2, y:canvas.height/2, r:18}, flexion:0, running:false, timeLeft:LEVEL_DURATION};
+  particles = []; spawnTimer = 0; spawnInterval = 80;
+  updateHUD();
+  document.getElementById('timer-box').classList.remove('urgent');
+  showPage('page-game');
+  showInstructions(() => { gs.running = true; startTimer(); });
+}
+
+// ── CALIBRATION ──
+let calibCamera = null;
+let calibHands = null;
+
+function initCalib() {
+  const videoEl = document.getElementById('calib-video');
+  const overlayEl = document.getElementById('calib-overlay');
+  const octx = overlayEl.getContext('2d');
+  const W = overlayEl.width, H = overlayEl.height;
+
+  calibHands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+  calibHands.setOptions({ maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.7, minTrackingConfidence:0.5 });
+
+  calibHands.onResults(results => {
+    octx.clearRect(0,0,W,H);
+    const statusEl = document.getElementById('calib-status');
+    if (results.multiHandLandmarks?.length) {
+      statusEl.textContent = 'Main détectée ! Tu peux commencer !';
+      statusEl.style.color = '#34d399';
+      const lm = results.multiHandLandmarks[0];
+      const CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+      octx.strokeStyle='rgba(79,156,249,0.8)'; octx.lineWidth=2;
+      CONN.forEach(([a,b])=>{
+        const la=lm[a],lb=lm[b];
+        octx.beginPath(); octx.moveTo((1-la.x)*W,la.y*H); octx.lineTo((1-lb.x)*W,lb.y*H); octx.stroke();
+      });
+      lm.forEach((p,i)=>{
+        const isTip=[4,8,12,16,20].includes(i);
+        octx.beginPath(); octx.arc((1-p.x)*W,p.y*H,isTip?5:3,0,Math.PI*2);
+        octx.fillStyle=isTip?'#34d399':'#a78bfa'; octx.fill();
+      });
+    } else {
+      statusEl.textContent = `Montre ta main ${injuredHand==='Left'?'gauche':'droite'} à la caméra`;
+      statusEl.style.color = 'rgba(255,255,255,0.55)';
+    }
+  });
+
+  calibCamera = new Camera(videoEl, {
+    onFrame: async () => { await calibHands.send({ image: videoEl }); },
+    width: 640, height: 480,
+  });
+  calibCamera.start().catch(() => {
+    document.getElementById('calib-status').textContent = '⚠️ Caméra non disponible';
+  });
+}
+
+function stopCalib() {
+  try { if (calibCamera) calibCamera.stop(); } catch(e) {}
+}
+
+// ── CANVAS ──
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+const camOverlay = document.getElementById('cam-overlay');
+const camCtx = camOverlay.getContext('2d');
+
+const LEVEL_DURATION = 120;
+const RING_COLORS = ['#f59e0b','#ec4899','#34d399','#4f9cf9','#f97316','#a78bfa'];
+
+let gs = {
+  score:0, level:1, ringsCollected:0, ringsTarget:10,
+  speed:2.2, rings:[], ball:{x:0,y:0,r:18},
+  flexion:0, running:false, timeLeft:LEVEL_DURATION,
+};
+
+// Particles
+let particles = [];
+
+function spawnParticles(x, y, color, type) {
+  const count = type==='catch' ? 18 : 8;
+  for (let i=0; i<count; i++) {
+    const angle = (Math.PI*2/count)*i + Math.random()*0.3;
+    const speed = type==='catch' ? (2+Math.random()*4) : (1+Math.random()*2);
+    particles.push({
+      x, y,
+      vx: Math.cos(angle)*speed,
+      vy: Math.sin(angle)*speed,
+      r: type==='catch' ? (3+Math.random()*4) : (2+Math.random()*3),
+      color,
+      alpha: 1,
+      decay: type==='catch' ? 0.025 : 0.04,
+    });
+  }
+}
+
+// Flash overlay
+let flashAlpha = 0;
+let flashColor = 'red';
+
+let spawnTimer=0, spawnInterval=80, timerInterval=null, lastLandmarks=null;
+
+function resizeCanvas() {
+  const maxW = Math.min(window.innerWidth-80,920);
+  const maxH = Math.min(window.innerHeight-100,600);
+  canvas.width=maxW; canvas.height=maxH;
+  gs.ball.x=canvas.width/2; gs.ball.y=canvas.height/2;
+  camOverlay.width=170; camOverlay.height=128;
+}
+
+function spawnRing() {
+  const margin=55;
+  gs.rings.push({
+    x: canvas.width+30,
+    y: margin+Math.random()*(canvas.height-margin*2),
+    r:22,
+    speed: gs.speed*(0.8+Math.random()*0.5),
+    color: RING_COLORS[Math.floor(Math.random()*RING_COLORS.length)],
+    caught:false, missed:false,
+  });
+}
+
+function updateGame() {
+  if (!gs.running) return;
+  spawnTimer++;
+  if (spawnTimer>=spawnInterval) { spawnRing(); spawnTimer=0; }
+
+  const targetY = canvas.height*0.08 + (canvas.height*0.84)*gs.flexion;
+  gs.ball.y += (targetY-gs.ball.y)*0.15;
+  gs.ball.x = canvas.width/2;
+
+  gs.rings.forEach(ring => {
+    if (ring.caught||ring.missed) return;
+    ring.x -= ring.speed;
+    const dx=gs.ball.x-ring.x, dy=gs.ball.y-ring.y;
+    if (Math.sqrt(dx*dx+dy*dy)<gs.ball.r+ring.r) {
+      ring.caught=true;
+      gs.score += 10*gs.level;
+      gs.ringsCollected++;
+      updateHUD();
+      spawnParticles(ring.x, ring.y, ring.color, 'catch');
+      flashAlpha=0.35; flashColor='rgba(52,211,153,0.35)';
+      showMsg('success'); playDing();
+      if (gs.ringsCollected>=gs.ringsTarget) setTimeout(()=>endLevel('rings'),400);
+    }
+    if (ring.x<-40) {
+      ring.missed=true; gs.ringsMissed++;
+      spawnParticles(20, ring.y, '#f87171', 'miss');
+      flashAlpha=0.3; flashColor='rgba(248,113,113,0.3)';
+      showMsg('miss'); playWhoosh();
+    }
+  });
+  gs.rings = gs.rings.filter(r=>!r.missed);
+
+  // Particles
+  particles.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.08; p.alpha-=p.decay; });
+  particles = particles.filter(p=>p.alpha>0);
+
+  // Flash decay
+  if (flashAlpha>0) flashAlpha -= 0.025;
+}
+
+function drawGame() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Background gradient
+  const bgGrad = ctx.createRadialGradient(canvas.width*0.5, canvas.height*0.4, 0, canvas.width*0.5, canvas.height*0.5, canvas.width*0.7);
+  bgGrad.addColorStop(0, '#0d1530');
+  bgGrad.addColorStop(0.5, '#080e1c');
+  bgGrad.addColorStop(1, '#060b16');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,0.018)'; ctx.lineWidth=1;
+  for (let x=0;x<canvas.width;x+=44){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke();}
+  for (let y=0;y<canvas.height;y+=44){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();}
+
+  // Flash overlay
+  if (flashAlpha>0) {
+    ctx.save(); ctx.globalAlpha=flashAlpha; ctx.fillStyle=flashColor;
+    ctx.fillRect(0,0,canvas.width,canvas.height); ctx.restore();
+  }
+
+  // Rings
+  gs.rings.forEach(ring=>{
+    if (ring.caught) return;
+    ctx.save();
+    ctx.strokeStyle=ring.color; ctx.lineWidth=4;
+    ctx.shadowColor=ring.color; ctx.shadowBlur=14;
+    ctx.beginPath(); ctx.arc(ring.x,ring.y,ring.r,0,Math.PI*2); ctx.stroke();
+    ctx.globalAlpha=0.15; ctx.fillStyle=ring.color; ctx.fill();
+    ctx.restore();
+  });
+
+  // Particles
+  particles.forEach(p=>{
+    ctx.save(); ctx.globalAlpha=p.alpha;
+    ctx.fillStyle=p.color; ctx.shadowColor=p.color; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  });
+
+  // Ball
+  const bx=gs.ball.x, by=gs.ball.y, br=gs.ball.r;
+  const glow=ctx.createRadialGradient(bx,by,0,bx,by,br*2.8);
+  glow.addColorStop(0,'rgba(79,156,249,0.28)'); glow.addColorStop(1,'rgba(79,156,249,0)');
+  ctx.beginPath(); ctx.arc(bx,by,br*2.8,0,Math.PI*2); ctx.fillStyle=glow; ctx.fill();
+  const bg=ctx.createRadialGradient(bx-br*.3,by-br*.3,br*.1,bx,by,br);
+  bg.addColorStop(0,'#a5c8ff'); bg.addColorStop(1,'#4f9cf9');
+  ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2);
+  ctx.fillStyle=bg; ctx.shadowColor='#4f9cf9'; ctx.shadowBlur=22; ctx.fill(); ctx.shadowBlur=0;
+
+  document.getElementById('flex-bar-fill').style.height=(gs.flexion*100)+'%';
+}
+
+// Hand landmarks on cam overlay
+const CONNECTIONS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+
+function drawHandOnCam(landmarks) {
+  camCtx.clearRect(0,0,camOverlay.width,camOverlay.height);
+  if (!landmarks) return;
+  const W=camOverlay.width, H=camOverlay.height;
+  // La vidéo est en scaleX(-1) — on dessine les landmarks avec x normal (pas inversé)
+  // pour qu'ils épousent exactement la main visible dans le feed
+  camCtx.strokeStyle='rgba(79,156,249,0.75)'; camCtx.lineWidth=1.5;
+  CONNECTIONS.forEach(([a,b])=>{
+    const la=landmarks[a],lb=landmarks[b];
+    camCtx.beginPath();
+    camCtx.moveTo((1-la.x)*W, la.y*H);
+    camCtx.lineTo((1-lb.x)*W, lb.y*H);
+    camCtx.stroke();
+  });
+  landmarks.forEach((lm,i)=>{
+    const isTip=[4,8,12,16,20].includes(i);
+    camCtx.beginPath();
+    camCtx.arc((1-lm.x)*W, lm.y*H, isTip?4:2.5, 0, Math.PI*2);
+    camCtx.fillStyle=isTip?'#34d399':'#a78bfa'; camCtx.fill();
+  });
+}
+
+// Timer
+function startTimer() {
+  gs.timeLeft=LEVEL_DURATION; updateTimerDisplay();
+  timerInterval=setInterval(()=>{
+    gs.timeLeft--;
+    updateTimerDisplay();
+    if (gs.timeLeft<=10) document.getElementById('timer-box').classList.add('urgent');
+    if (gs.timeLeft<=0) { clearInterval(timerInterval); endLevel('time'); }
+  },1000);
+}
+function updateTimerDisplay() {
+  const m=Math.floor(gs.timeLeft/60), s=gs.timeLeft%60;
+  document.getElementById('hud-timer').textContent=m+':'+String(s).padStart(2,'0');
+}
+
+function endLevel(reason) {
+  gs.running=false; clearInterval(timerInterval);
+  const timeUsed = LEVEL_DURATION - gs.timeLeft;
+  const totalSpawned = gs.ringsCollected + gs.ringsMissed;
+  const pct = totalSpawned > 0 ? Math.round((gs.ringsCollected / totalSpawned) * 100) : 0;
+
+  document.getElementById('end-score').textContent = gs.score;
+  document.getElementById('end-pct').textContent = pct + '%';
+  document.getElementById('end-rings-recap').textContent = gs.ringsCollected + '/' + gs.ringsTarget;
+  document.getElementById('end-time-recap').textContent = timeUsed + 's';
+
+  let title, msg;
+  if (pct >= 70) {
+    title = `Excellente session ${patientName} !`;
+    msg = reason === 'rings'
+      ? `Niveau ${gs.level} terminé avec brio ! Tu as récupéré ${gs.ringsCollected} anneaux.`
+      : `Très belle performance ${patientName} ! ${pct}% de réussite !`;
+    document.getElementById('end-score').style.color = 'var(--accent3)';
+  } else if (pct >= 40) {
+    title = `Bonne session ${patientName} !`;
+    msg = `${gs.ringsCollected} anneaux récupérés. Tu progresses ${patientName} continue comme ça !`;
+    document.getElementById('end-score').style.color = 'var(--accent)';
+  } else {
+    title = `Continue comme ça ${patientName} !`;
+    msg = `${gs.ringsCollected} anneaux récupérés. Chaque session compte et tu t'améliores !`;
+    document.getElementById('end-score').style.color = 'var(--accent2)';
+  }
+
+  document.getElementById('end-title').textContent = title;
+  document.getElementById('end-msg').textContent = msg;
+
+  // Show or block next level button
+  if (pct >= 90) {
+    document.getElementById('end-next-ok').style.display = 'block';
+    document.getElementById('end-next-blocked').style.display = 'none';
+  } else {
+    document.getElementById('end-next-ok').style.display = 'none';
+    document.getElementById('end-next-blocked').style.display = 'block';
+    document.getElementById('end-name-blocked').textContent = patientName;
+  }
+
+  document.getElementById('end-overlay').classList.add('visible');
+}
+
+function nextLevel() {
+  gs.level++; gs.ringsCollected=0; gs.ringsMissed=0; gs.rings=[]; particles=[];
+  gs.speed+=0.5; spawnInterval=Math.max(40,spawnInterval-8);
+  gs.running=false;
+  document.getElementById('timer-box').classList.remove('urgent');
+  document.getElementById('end-overlay').classList.remove('visible');
+  updateHUD();
+  gs.running=true; startTimer();
+}
+
+function retryLevel() {
+  gs.ringsCollected=0; gs.ringsMissed=0; gs.rings=[]; particles=[];
+  gs.running=false;
+  document.getElementById('timer-box').classList.remove('urgent');
+  document.getElementById('end-overlay').classList.remove('visible');
+  gs.timeLeft=LEVEL_DURATION; updateHUD();
+  showInstructions(() => { gs.running=true; startTimer(); });
+}
+
+function updateHUD() {
+  document.getElementById('hud-score').textContent=gs.score;
+  document.getElementById('hud-level').textContent=gs.level;
+  document.getElementById('hud-rings').textContent=gs.ringsCollected+'/'+gs.ringsTarget;
+}
+
+// Encouragement — gros, centré
+let encTimeout=null;
+const successMsgs=[
+  ()=>`Bravo ${patientName} !`,
+  ()=>`Continue comme ça, ${patientName} !`,
+  ()=>`Excellent ${patientName} !`,
+  ()=>`Tu maîtrises ça, ${patientName} !`,
+  ()=>`Superbe, ${patientName} !`,
+  ()=>`${patientName}, tu es en pleine forme !`,
+];
+const missMsgs=[
+  ()=>`Tu peux y arriver, ${patientName} !`,
+  ()=>`Je crois en toi, ${patientName} !`,
+  ()=>`Ne lâche pas, ${patientName} !`,
+  ()=>`Le prochain est pour toi, ${patientName} !`,
+  ()=>`Allez ${patientName}, concentre-toi !`,
+];
+
+function showMsg(type) {
+  const arr=type==='success'?successMsgs:missMsgs;
+  const msg=arr[Math.floor(Math.random()*arr.length)]();
+  const el=document.getElementById('encourage-msg');
+  el.textContent=msg;
+  el.style.color=type==='success'?'var(--accent3)':'var(--accent)';
+  el.style.textShadow=type==='success'
+    ?'0 0 40px rgba(52,211,153,0.7),0 2px 8px rgba(0,0,0,0.9)'
+    :'0 0 40px rgba(79,156,249,0.7),0 2px 8px rgba(0,0,0,0.9)';
+  el.classList.add('visible');
+  clearTimeout(encTimeout);
+  encTimeout=setTimeout(()=>el.classList.remove('visible'),2000);
+}
+
+// Game loop
+function loop() { updateGame(); drawGame(); drawHandOnCam(lastLandmarks); requestAnimationFrame(loop); }
+
+function initGame() {
+  resizeCanvas();
+  gs={score:0,level:1,ringsCollected:0,ringsMissed:0,ringsTarget:10,speed:2.2,rings:[],
+      ball:{x:canvas.width/2,y:canvas.height/2,r:18},flexion:0,running:false,timeLeft:LEVEL_DURATION};
+  particles=[]; spawnTimer=0; spawnInterval=80;
+  updateHUD();
+  requestAnimationFrame(loop);
+  initMediaPipe();
+  showInstructions(() => { gs.running=true; startTimer(); });
+}
+
+// MediaPipe — filtre sur la main blessée
+function initMediaPipe() {
+  const videoEl=document.getElementById('cam-video');
+  const hands=new Hands({ locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+  hands.setOptions({ maxNumHands:2, modelComplexity:1, minDetectionConfidence:0.7, minTrackingConfidence:0.5 });
+
+  hands.onResults(results=>{
+    let targetLandmarks=null;
+
+    if (results.multiHandLandmarks?.length) {
+      // Cherche la main blessée parmi les mains détectées
+      // MediaPipe label: 'Left'/'Right' mais inversé par rapport à la réalité (miroir)
+      // La main "Right" de MediaPipe = main gauche du patient (car caméra miroir)
+      const mirrorLabel = injuredHand==='Left' ? 'Right' : 'Left';
+
+      for (let i=0; i<results.multiHandLandmarks.length; i++) {
+        const label=results.multiHandedness?.[i]?.label;
+        if (label===mirrorLabel) { targetLandmarks=results.multiHandLandmarks[i]; break; }
+      }
+      // fallback : prend la première main détectée
+      if (!targetLandmarks) targetLandmarks=results.multiHandLandmarks[0];
+    }
+
+    document.getElementById('cam-status').textContent=targetLandmarks
+      ?`Main ${injuredHand==='Left'?'gauche':'droite'} détectée ! Fléchis tes doigts pour descendre la balle`
+      :`Montre ta main ${injuredHand==='Left'?'gauche':'droite'} à la caméra`;
+
+    if (targetLandmarks) {
+      lastLandmarks=targetLandmarks;
+      const fingers=[{tip:8,mcp:5},{tip:12,mcp:9},{tip:16,mcp:13},{tip:20,mcp:17}];
+      let total=0;
+      fingers.forEach(f=>{
+        const dy=targetLandmarks[f.tip].y-targetLandmarks[f.mcp].y;
+        total+=Math.min(1,Math.max(0,(dy+0.1)/0.2));
+      });
+      gs.flexion=total/fingers.length;
+    } else { lastLandmarks=null; }
+  });
+
+  const camera=new Camera(videoEl,{
+    onFrame:async()=>{ await hands.send({image:videoEl}); },
+    width:640, height:480,
+  });
+  camera.start().catch(()=>{
+    document.getElementById('cam-status').textContent='⚠️ Caméra non disponible — mode démo';
+    let t=0; setInterval(()=>{ t+=0.025; gs.flexion=(Math.sin(t)+1)/2; },16);
+  });
+}
+
+window.addEventListener('resize',()=>{
+  if (document.getElementById('page-game').classList.contains('active')) resizeCanvas();
+});
+</script>
+
+<!-- PAGE MENU STATS -->
+<div class="page" id="page-menu">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:28px;max-width:560px;width:90%;text-align:center;">
+    <div class="badge">Récapitulatif de séance</div>
+    <h2 style="font-family:'DM Serif Display',serif;font-size:2rem;">Bravo <span id="menu-name"></span> !</h2>
+    <p style="color:#b0bcd4;font-size:.9rem;">Voici les résultats de ta séance PhysioHand Game</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%;">
+      <div style="background:rgba(79,156,249,0.08);border:1px solid rgba(79,156,249,0.2);border-radius:16px;padding:20px;">
+        <div style="font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Niveaux complétés</div>
+        <div id="menu-levels" style="font-family:'DM Serif Display',serif;font-size:2.4rem;color:var(--accent);">0</div>
+      </div>
+      <div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:16px;padding:20px;">
+        <div style="font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Score total</div>
+        <div id="menu-score" style="font-family:'DM Serif Display',serif;font-size:2.4rem;color:var(--accent3);">0</div>
+      </div>
+      <div style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:16px;padding:20px;">
+        <div style="font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Réussite moyenne</div>
+        <div id="menu-pct" style="font-family:'DM Serif Display',serif;font-size:2.4rem;color:var(--accent2);">0%</div>
+      </div>
+      <div style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);border-radius:16px;padding:20px;">
+        <div style="font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Anneaux attrapés</div>
+        <div id="menu-rings" style="font-family:'DM Serif Display',serif;font-size:2.4rem;color:#f97316;">0</div>
+      </div>
+    </div>
+
+    <div id="menu-msg" style="font-size:.9rem;color:#b0bcd4;line-height:1.7;padding:16px 20px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;width:100%;"></div>
+
+    <div style="display:flex;gap:16px;width:100%;">
+      <button class="btn" onclick="restartGame()" style="flex:1;justify-content:center;">Rejouer →</button>
+      <button class="btn" onclick="showPage('page-disclaimer')" style="flex:1;justify-content:center;background:rgba(255,255,255,0.06);box-shadow:none;border:1px solid rgba(255,255,255,0.1);">Accueil</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
